@@ -86,6 +86,7 @@ object WasmVm {
 
       _ ← Log.eitherT[F, InitializationError].info("WasmVm: configs read...")
       vmRunnerInvoker = new FrankAdapter()
+      _ = System.load("/usr/lib/libfrank.a")
 
       initializationResult = vmRunnerInvoker.initialize(inFiles.head, config)
 
