@@ -88,7 +88,7 @@ class WorkerWebsocket[F[_]: Concurrent](
 
   private def toWebsocketResponse(requestId: String, response: AwaitedResponse.OrError): WebsocketResponse =
     response match {
-      case Right(OkResponse(_, response))    => TxWaitResponse(requestId, response)
+      case Right(OkResponse(_, response))    => QueryResponse(requestId, response)
       case Right(RpcErrorResponse(_, error)) => ErrorResponse(requestId, error.getMessage)
       case Right(TimedOutResponse(_, tries)) =>
         ErrorResponse(requestId, s"Cannot get response after $tries generated blocks")

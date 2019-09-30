@@ -65,7 +65,7 @@ object StateMachineHttp {
           queryResp ← stateMachine.query(path).value
           res ← queryResp.fold(
             err ⇒ InternalServerError(err.getMessage),
-            resp ⇒ Ok(resp.toResponseString())
+            resp ⇒ Ok(resp.asJson.noSpaces)
           )
         } yield res
     }

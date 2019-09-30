@@ -18,6 +18,7 @@ package fluence.worker.responder.resp
 
 import fluence.bp.tx.Tx
 import fluence.effects.EffectError
+import fluence.statemachine.api.query.QueryResponse
 
 // possible variants of responses from statemachine's `query` method
 sealed trait AwaitedResponse {
@@ -32,7 +33,7 @@ object AwaitedResponse {
  * Response that is ok for client. Master node must return it right away.
  *
  */
-case class OkResponse(id: Tx.Head, response: String) extends AwaitedResponse
+case class OkResponse(id: Tx.Head, response: QueryResponse) extends AwaitedResponse
 
 /**
  * Transport error

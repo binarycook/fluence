@@ -17,7 +17,8 @@
 package fluence.statemachine.api.query
 
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Decoder, Encoder, HCursor}
+import io.circe.generic.semiauto.{deriveEncoder}
 import scodec.bits.ByteVector
 
 /**
@@ -39,24 +40,7 @@ object QueryResponse {
   implicit val byteDecoder: Decoder[Array[Byte]] =
     Decoder[String].emap(ByteVector.fromBase64Descriptive(_)).map(_.toArray)
 
-  implicit val encoder: Encoder[(String, QueryResponse)] = {
-    case (id: String, resp: QueryResponse) =>
-      Json.obj(
-        ("jsonrpc", Json.fromString("2.0")),
-        ("id", Json.fromString(id)),
-        ("result", Json.obj {
-          (
-            "response",
-            Json.obj(
-              ("code", Json.fromInt(resp.code.id)),
-              ("info", Json.fromString(resp.info)),
-              ("height", Json.fromString(resp.height.toString)),
-              ("value", resp.result.asJson)
-            )
-          )
-        })
-      )
-  }
+  implicit val encoder: Encoder[QueryResponse] = deriveEncoder[QueryResponse]
 
   implicit val decoder: Decoder[QueryResponse] = (c: HCursor) => {
     val res = c.downField("result").downField("response")

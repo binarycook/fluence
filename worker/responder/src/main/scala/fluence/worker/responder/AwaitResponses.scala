@@ -72,7 +72,7 @@ class AwaitResponses[F[_]: Concurrent: Parallel: Timer, B: TxsBlock](
               log.debug(
                 s"got block ${TxsBlock[B]
                   .height(b)} nonEmptyBlock: ${nonEmptyBlock(b)} ${TxsBlock[B].txs(b).map(_.takeWhile(_ != '\n'.toByte).decodeUtf8).mkString(", ")}"
-              )
+            )
           )
           .evalMap(_ => pollResponses(machine))
         _ <- MakeResource.concurrentStream(pollingStream)
@@ -113,7 +113,7 @@ class AwaitResponses[F[_]: Concurrent: Parallel: Timer, B: TxsBlock](
         case Left(e)                                  => RpcErrorResponse(txHead, e)
         case Right(r) if r.code == QueryCode.Pending  => PendingResponse(txHead)
         case Right(r) if r.code == QueryCode.NotFound => PendingResponse(txHead)
-        case Right(r)                                 => OkResponse(txHead, r.toResponseString())
+        case Right(r)                                 => OkResponse(txHead, r)
         // TODO: is it ok to return CannotParseHeader & Dropped as OkResponse?
       }
 

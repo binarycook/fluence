@@ -66,9 +66,9 @@ class SendAndWait[F[_]: Monad](
     implicit log: Log[F]
   ): F[AwaitedResponse] =
     for {
-      _ <- log.debug(s"Waiting for response")
+      _ <- log.trace(s"Waiting for response")
       response <- responseSubscriber.await(tx.head).flatMap(_.get)
-      _ <- Log[F].trace(s"Response received: $response")
+      _ <- log.trace(s"Response received: $response")
     } yield response
 
   /**

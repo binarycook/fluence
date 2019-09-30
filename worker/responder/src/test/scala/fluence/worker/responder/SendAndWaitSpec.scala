@@ -192,7 +192,8 @@ class SendAndWaitSpec extends WordSpec with Matchers with BeforeAndAfterAll with
       result.right.get shouldBe a[OkResponse]
 
       val ok = result.right.get.asInstanceOf[OkResponse]
-      ok.response shouldBe correctQueryResponse.toResponseString()
+      import io.circe.syntax._
+      ok.response shouldBe correctQueryResponse.asJson.noSpaces
     }
   }
 }

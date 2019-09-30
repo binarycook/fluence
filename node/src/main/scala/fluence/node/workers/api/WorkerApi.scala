@@ -18,9 +18,9 @@ package fluence.node.workers.api
 
 import cats.effect.Concurrent
 import cats.syntax.apply._
-import cats.syntax.functor._
+import io.circe.syntax._
 import fluence.bp.api.BlockProducer
-import fluence.bp.tx.{Tx, TxResponse}
+import fluence.bp.tx.Tx
 import fluence.effects.tendermint.rpc.http.{RpcError, RpcRequestFailed}
 import fluence.log.Log
 import fluence.node.workers.WorkersPorts
@@ -113,7 +113,7 @@ object WorkerApi {
         machine
           .query(path)
           .leftMap(e ⇒ RpcRequestFailed(e): RpcError)
-          .map(_.toResponseString(id.getOrElse("dontcare")))
+          .map(_.asJson.noSpaces)
           .value
 
     override def p2pPort()(implicit log: Log[F]): F[Short] =
