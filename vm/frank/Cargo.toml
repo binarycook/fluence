@@ -28,6 +28,7 @@ sha2 = "0.8.0"
 clap = "2.33.0"
 exitfailure = "0.5.1"
 boolinator = "2.4.0"
+rental = "0.5.5"
 
 [profile.release]
 opt-level = 3

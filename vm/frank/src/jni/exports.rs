@@ -15,7 +15,6 @@
  */
 
 /// Defines export functions that will be accessible from the Scala part.
-
 use crate::config::Config;
 use crate::errors::FrankError;
 use crate::frank::{Frank, FRANK};
@@ -34,11 +33,12 @@ pub extern "system" fn Java_fluence_vm_frank_FrankAdapter_initialize<'a>(
     module_path: JString,
     config: JObject,
 ) -> JObject<'a> {
+    // returns expects_eth state
     fn initialize<'a>(
         env: &JNIEnv<'a>,
         module_path: JString,
         config: JObject,
-    ) -> Result<(bool), FrankError> {
+    ) -> Result<bool, FrankError> {
         let file_name: String = env.get_string(module_path)?.into();
         let config = Config::new(&env, config)?;
         let frank = Frank::new(&file_name, config)?;
