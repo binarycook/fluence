@@ -16,32 +16,26 @@
 
 use crate::config::Config;
 use crate::errors::FrankError;
+use crate::frank_funcs::FrankFuncs;
 use crate::frank_result::FrankResult;
 use crate::modules::env_module::EnvModule;
-use sha2::{digest::generic_array::GenericArray, digest::FixedOutput, Digest, Sha256};
-use std::pin::Pin;
-use std::{ffi::c_void, fs};
-use wasmer_runtime::{func, imports, instantiate, Ctx, Func, Instance};
 
-struct AllocateFunc<'a> {
-    func: Func<'a, (i32), i32>,
-}
+use self::frank_rent::FrankRental;
+use sha2::{digest::generic_array::GenericArray, digest::FixedOutput, Digest, Sha256};
+use std::{ffi::c_void, fs};
+use wasmer_runtime::{func, imports, instantiate, Ctx, Instance};
 
 rental! {
-    mod rentals {
+    pub mod frank_rent {
         use super::*;
 
-        #[rental_mut]
-        pub struct FrankRental<A: 'static, B: 'static> {
+        #[rental]
+        pub struct FrankRental {
             instance: Box<Instance>,
-            allocate: AllocateFunc<'instance>,
-            deallocate: Func<'instance, (i32, i32), ()>,
-            invoke: Func<'instance, (i32, i32), i32>,
+            funcs: FrankFuncs<'instance>,
         }
     }
 }
-
-pub struct Frank(FrankRental);
 
 // Waiting for new release of Wasmer with https://github.com/wasmerio/wasmer/issues/748.
 // It will allow to use lazy_static here. thread_local isn't suitable in our case because
@@ -53,10 +47,12 @@ pub static mut FRANK: Option<Box<Frank>> = None;
 // Will be changed in the future.
 const ETH_FUNC_NAME: &str = "expects_eth";
 
+pub struct Frank(FrankRental);
+
 impl Frank {
     /// Writes given value on the given address.
     fn write_to_mem(&mut self, address: usize, value: &[u8]) -> Result<(), FrankError> {
-        let memory = self.0.instance.context_mut().memory(0);
+        let memory = self.0.into_head().context_mut().memory(0);
 
         for (byte_id, cell) in memory.view::<u8>()[address as usize..(address + value.len())]
             .iter()
@@ -70,7 +66,7 @@ impl Frank {
 
     /// Reads given count of bytes from given address.
     fn read_result_from_mem(&self, address: usize) -> Result<Vec<u8>, FrankError> {
-        let memory = self.instance.context().memory(0);
+        let memory = self.0.into_head().context_mut().memory(0);
 
         let mut result_size: usize = 0;
 
@@ -90,13 +86,14 @@ impl Frank {
     pub fn invoke(&mut self, fn_argument: &[u8]) -> Result<FrankResult, FrankError> {
         // renew the state of the registered environment module to track spent gas and eic
         let env: &mut EnvModule =
-            unsafe { &mut *(self.instance.context_mut().data as *mut EnvModule) };
+            unsafe { &mut *(self.0.into_head().context_mut().data as *mut EnvModule) };
         env.renew_state();
 
         // allocate memory for the given argument and write it to memory
         let argument_len = fn_argument.len() as i32;
+        let &module_api = self.0.rent(|instance| instance);
         let argument_address = if argument_len != 0 {
-            let address = self.allocate.call(argument_len)?;
+            let address = module_api.allocate.call(argument_len)?;
             self.write_to_mem(address as usize, fn_argument)?;
             address
         } else {
@@ -104,9 +101,11 @@ impl Frank {
         };
 
         // invoke a main module, read a result and deallocate it
-        let result_address = self.invoke.call(argument_address, argument_len)?;
+        let result_address = module_api.invoke.call(argument_address, argument_len)?;
         let result = self.read_result_from_mem(result_address as usize)?;
-        self.deallocate.call(result_address, result.len() as i32)?;
+        module_api
+            .deallocate
+            .call(result_address, result.len() as i32)?;
 
         let state = env.get_state();
         Ok(FrankResult::new(result, state.0, state.1))
@@ -117,7 +116,7 @@ impl Frank {
         &mut self,
     ) -> GenericArray<u8, <Sha256 as FixedOutput>::OutputSize> {
         let mut hasher = Sha256::new();
-        let memory = self.instance.context_mut().memory(0);
+        let memory = self.0.into_head().context_mut().memory(0);
 
         for cell in memory.view::<u8>()[0 as usize..memory.size().0 as usize].iter() {
             // it is too slow now and could be optimized when PR with memory will be landed
@@ -156,25 +155,14 @@ impl Frank {
         };
 
         let instance = instantiate(&wasm_code, &import_objects)?;
+        let expects_eth = instance.func::<(), ()>(ETH_FUNC_NAME).is_ok();
 
-        Frank::try_new(
-            Box::new(instance),
-            |instance| unsafe { instance.func::<(i32), i32>(&config.allocate_function_name)? },
-            |instance| unsafe {
-                instance.func::<(i32, i32), ()>(&config.deallocate_function_name)?
-            },
-            |instance| unsafe { instance.func::<(i32, i32), i32>(&config.invoke_function_name)? },
-        );
-
-        Ok((
-            Self {
-                instance,
-                allocate,
-                deallocate,
-                invoke,
-            },
-            expects_eth,
-        ))
+        match FrankRental::try_new(Box::new(instance), |instance| {
+            FrankFuncs::new(instance, &config)
+        }) {
+            Ok(instance) => Ok((Self(instance), expects_eth)),
+            Err(err) => Err(FrankError::InstantiationError(format!("asd"))),
+        }
     }
 }
 

@@ -27,6 +27,10 @@ pub enum InstantiationError {
 
     /// Error that raises during creation of some Wasm objects (like table and memory) by Wasmer.
     WasmerCompileError(String),
+
+    /// Error that raises if a main module doesn't contain one ofinvoke, allocate or deallocate
+    /// functions.
+    FuncNotFound(String),
 }
 
 pub enum FrankError {
@@ -54,6 +58,7 @@ impl std::fmt::Display for InstantiationError {
         match self {
             InstantiationError::WasmerCompileError(msg) => write!(f, "{}", msg),
             InstantiationError::WasmerCreationError(msg) => write!(f, "{}", msg),
+            InstantiationError::FuncNotFound(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -93,6 +98,12 @@ impl From<CompileError> for InstantiationError {
     }
 }
 
+impl From<ResolveError> for InstantiationError {
+    fn from(err: ResolveError) -> Self {
+        InstantiationError::FuncNotFound(format!("{}", err))
+    }
+}
+
 impl From<InstantiationError> for FrankError {
     fn from(err: InstantiationError) -> Self {
         FrankError::InstantiationError(format!("{}", err))
@@ -105,12 +116,6 @@ impl From<CallError> for FrankError {
             CallError::Resolve(err) => FrankError::WasmerResolveError(format!("{}", err)),
             CallError::Runtime(err) => FrankError::WasmerInvokeError(format!("{}", err)),
         }
-    }
-}
-
-impl From<ResolveError> for FrankError {
-    fn from(err: ResolveError) -> Self {
-        FrankError::WasmerResolveError(format!("{}", err))
     }
 }
 

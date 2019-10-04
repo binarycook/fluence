@@ -20,6 +20,7 @@ use crate::errors::FrankError;
 use crate::frank::{Frank, FRANK};
 use crate::frank_result::FrankResult;
 use crate::jni::jni_results::*;
+
 use jni::objects::{JClass, JObject, JString};
 use jni::sys::jbyteArray;
 use jni::JNIEnv;
