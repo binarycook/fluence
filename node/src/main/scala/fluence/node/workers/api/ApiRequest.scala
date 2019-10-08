@@ -18,8 +18,8 @@ package fluence.node.workers.api
 
 import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Sync, Timer}
-import fluence.bp.api.BlockProducer
-import fluence.bp.tx.{Tx, TxCode}
+import fluence.bp.api.{BlockProducer, BlockProducerStatus}
+import fluence.bp.tx.{Tx, TxCode, TxResponse}
 import fluence.effects.EffectError
 import fluence.log.{Log, LogFactory}
 import fluence.node.workers.api.websocket.WebsocketRequests.TxWaitRequest
@@ -28,13 +28,14 @@ import fluence.statemachine.api.query.QueryCode
 import fluence.statemachine.api.StateMachine
 import fluence.worker.responder.{SendAndWait, WorkerResponder}
 import fluence.worker.responder.resp.{AwaitedResponse, OkResponse, TxAwaitError}
+import shapeless.{HList, HNil}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.language.higherKinds
 
 sealed trait ApiErrorT
-case class UnexpectedApiErrorT(message: String, throwable: Option[Throwable] = None) extends ApiErrorT
-case class EffectApiErrorT(message: String, effectError: EffectError) extends ApiErrorT
+case class UnexpectedApiError(message: String, throwable: Option[Throwable] = None) extends ApiErrorT
+case class EffectApiError(message: String, effectError: EffectError) extends ApiErrorT
 case class ApiError(message: String) extends ApiErrorT
 
 sealed trait ApiResponse
@@ -79,10 +80,10 @@ object NewApi {
   implicit def queryHandler[F[_]: Sync: Log](implicit SM: StateMachine[F]): Handler[F, QueryRequest] =
     new Handler[F, QueryRequest] {
       override def apply(req: QueryRequest): EitherT[F, ApiErrorT, QueryResponse] =
-        SM.query(req.path).map(r => QueryResponse(new String(r.result))).leftMap(e => EffectApiErrorT("", e): ApiErrorT)
+        SM.query(req.path).map(r => QueryResponse(new String(r.result))).leftMap(e => EffectApiError("", e): ApiErrorT)
     }
 
-  implicit def txHandler[F[_]: Sync: Log](implicit SW: SendAndWait[F]): Handler[F, TxAwaitRequest] =
+  implicit def txAwaitHandler[F[_]: Sync: Log](implicit SW: SendAndWait[F]): Handler[F, TxAwaitRequest] =
     new Handler[F, TxAwaitRequest] {
       override def apply(req: TxAwaitRequest): EitherT[F, ApiErrorT, QueryResponse] =
         SW.sendTxAwaitResponse(req.tx)
@@ -93,12 +94,20 @@ object NewApi {
           .leftMap(e => ApiError(e.msg): ApiErrorT)
     }
 
+  implicit def txHander[F[_]: Sync: Log](implicit BP: BlockProducer[F]): Handler[F, TxRequest] =
+    new Handler[F, TxRequest] {
+      override def apply(req: TxRequest): EitherT[F, ApiErrorT, TxResponseNew] =
+        BP.sendTx(req.tx)
+          .leftMap(e => EffectApiError("", e): ApiErrorT)
+          .map(r => TxResponseNew(r.code, r.info, r.height))
+    }
+
 }
 
 object TestRun extends App {
 
   import NewApi._
-  //producer: BlockProducer[F]
+
   implicit private val ioTimer: Timer[IO] = IO.timer(global)
   implicit private val ioShift: ContextShift[IO] = IO.contextShift(global)
   implicit private val logFactory = LogFactory.forPrintln[IO](level = Log.Error)
@@ -119,9 +128,20 @@ object TestRun extends App {
       EitherT.fromEither(Right(OkResponse(Tx.Head("session", 1), "response: " + new String(tx))))
   }
 
+  implicit val blockProducer = new BlockProducer[IO] {
+    override type Commands = HNil
+    override protected val commands = HNil
+    override def sendTx(txData: Array[Byte])(implicit log: Log[IO]): EitherT[IO, EffectError, TxResponse] =
+      EitherT.fromEither(Right(TxResponse(TxCode.OK, "")))
+    override def status()(implicit log: Log[IO]): EitherT[IO, EffectError, BlockProducerStatus] = ???
+  }
+
   val res = QueryRequest("???", None, None).handle[IO].value.unsafeRunSync()
   println(res)
 
   val res2 = TxAwaitRequest("some-tx".getBytes()).handle[IO].value.unsafeRunSync()
   println(res2)
+
+  val res3 = TxRequest("some-tx".getBytes()).handle[IO].value.unsafeRunSync()
+  println(res3)
 }
