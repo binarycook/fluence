@@ -27,10 +27,17 @@ import fluence.worker.responder.resp.{AwaitedResponse, RpcTxAwaitError, TxAwaitE
 
 import scala.language.higherKinds
 
-class SendAndWait[F[_]: Monad](
+trait SendAndWait[F[_]] {
+
+  def sendTxAwaitResponse(tx: Array[Byte])(
+    implicit log: Log[F]
+  ): EitherT[F, TxAwaitError, AwaitedResponse]
+}
+
+class SendAndWaitImpl[F[_]: Monad](
   producer: BlockProducer[F],
   responseSubscriber: AwaitResponses[F, _]
-) {
+) extends SendAndWait[F] {
 
   /**
    * Sends transaction to a state machine and waiting for a response.
@@ -102,5 +109,5 @@ object SendAndWait {
     producer: BlockProducer[F],
     responseSubscriber: AwaitResponses[F, _]
   ): SendAndWait[F] =
-    new SendAndWait(producer, responseSubscriber)
+    new SendAndWaitImpl(producer, responseSubscriber)
 }
