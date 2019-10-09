@@ -22,8 +22,7 @@ import cats.{Monad, Parallel}
 import cats.effect.{ConcurrentEffect, ContextShift, LiftIO, Resource, Timer}
 import cats.syntax.apply._
 import cats.syntax.compose._
-import cats.syntax.applicative._
-import fluence.bp.api.{BlockProducer, BlockStream, DialPeers}
+import fluence.bp.api.{BlockStream, DialPeers}
 import fluence.bp.uploading.BlockUploading
 import fluence.codec.PureCodec
 import fluence.effects.{Backoff, EffectError}
@@ -40,7 +39,6 @@ import fluence.node.config.MasterConfig
 import fluence.node.workers.{WorkerBlockManifests, WorkerDocker, WorkerFiles, WorkerP2pConnectivity, WorkersPorts}
 import fluence.node.workers.tendermint.DockerTendermint
 import fluence.node.workers.tendermint.config.ConfigTemplate
-import fluence.statemachine.api.StateMachine
 import fluence.statemachine.api.command.{PeersControl, ReceiptBus}
 import fluence.statemachine.docker.DockerStateMachine
 import fluence.worker.{Worker, WorkerContext, WorkerResource, WorkersPool}
@@ -53,7 +51,7 @@ import scala.language.{higherKinds, reflectiveCalls}
 object MasterPool {
 
   type Resources[F[_]] = WorkerFiles.Paths[F] :: WorkersPorts.P2pPort[F] :: HNil
-  type Companions[F[_]] = BlockProducer[F] :: StateMachine[F] :: PeersControl[F] :: WorkerResponder[F] :: HNil
+  type Companions[F[_]] = PeersControl[F] :: WorkerResponder[F] :: HNil
 
   type Type[F[_]] = WorkersPool[F, Resources[F], Companions[F]]
 
@@ -97,7 +95,7 @@ object MasterPool {
           conf.worker,
           conf.dockerStopTimeout,
           conf.logLevel
-      )
+        )
 
       codeCarrier ← Resource.pure(CodeCarrier[F](conf.remoteStorage))
       workerFiles = WorkerFiles(rootPath, codeCarrier)
@@ -182,12 +180,11 @@ object MasterPool {
 
           responder ← WorkerResponder.make[F, producer.Commands, Block](producer, machine)
 
-        } yield
-          Worker(
-            app.id,
-            machine,
-            producer,
-            machine.command[PeersControl[F]] :: responder :: machine :: producer :: HNil
+        } yield Worker(
+          app.id,
+          machine,
+          producer,
+          machine.command[PeersControl[F]] :: responder :: HNil
         )
 
     WorkersPool.make[F, Resources[F], Companions[F]] { (app, l) ⇒

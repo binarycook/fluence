@@ -16,15 +16,18 @@
 
 package fluence.node.workers.api
 
-import cats.Parallel
+import cats.{Applicative, Functor, Parallel}
+import cats.data.EitherT
 import cats.effect.{Concurrent, Sync, Timer}
 import cats.syntax.flatMap._
+import cats.syntax.functor._
+import cats.syntax.applicative._
 import fluence.bp.api.BlockProducer
-import fluence.log.LogFactory
+import fluence.log.{Log, LogFactory}
 import fluence.statemachine.api.StateMachine
-import fluence.worker.WorkersPool
+import fluence.worker.{Worker, WorkersPool}
 import io.circe.syntax._
-import org.http4s.HttpRoutes
+import org.http4s.{HttpRoutes, Request}
 import org.http4s.dsl.Http4sDsl
 import shapeless._
 
@@ -32,61 +35,36 @@ import scala.language.higherKinds
 
 object BasicHttp {
 
-  /**
-   * Routes for Workers API.
-   *
-   * @param pool Workers pool to get workers from
-   * @param dsl Http4s DSL to build routes with
-   */
-  def routes[F[_]: Sync: LogFactory: Concurrent: Timer: Parallel, RS <: HList, CS <: HList](
-    pool: WorkersPool[F, RS, CS]
-  )(
-    implicit dsl: Http4sDsl[F],
-    wr: ops.hlist.Selector[CS, StateMachine[F]],
-    bp: ops.hlist.Selector[CS, BlockProducer[F]]
-  ): HttpRoutes[F] = {
-    import ApiRequest._
+  def readRequest[F[_]: Sync](implicit dsl: Http4sDsl[F]): PartialFunction[Request[F], F[ApiRequest]] = {
     import dsl._
-
     object QueryPath extends QueryParamDecoderMatcher[String]("path")
 
-    // Routes comes there
-    HttpRoutes.of {
-      case GET -> Root / LongVar(appId) / "query" :? QueryPath(path) ⇒
-        LogFactory[F].init("http" -> "query", "app" -> appId.toString) >>= { implicit log =>
-          pool
-            .getCompanion[StateMachine[F]](appId)
-            .foldF(
-              stage => HttpUtils.stageToResponse(appId, stage),
-              implicit sm =>
-                QueryRequest(path)
-                  .handle[F]
-                  .foldF(
-                    err => HttpUtils.rpcErrorToResponse(err),
-                    r => Ok((r: ApiResponse).asJson.noSpaces)
-                )
-            )
+    {
+      case GET -> Root / "query" :? QueryPath(path) ⇒
+        Applicative[F].pure(QueryRequest(path))
 
-        }
-
-      case req @ POST -> Root / LongVar(appId) / "tx" ⇒
-        LogFactory[F].init("http" -> "tx", "app" -> appId.toString) >>= { implicit log =>
-          req.decode[Array[Byte]] { tx ⇒
-            log.debug(s"tx.head: ${tx.takeWhile(_ != '\n')}") >>
-              pool
-                .getCompanion[BlockProducer[F]](appId)
-                .foldF(
-                  stage => HttpUtils.stageToResponse(appId, stage),
-                  implicit bp =>
-                    TxRequest(tx)
-                      .handle[F]
-                      .foldF(
-                        err => HttpUtils.rpcErrorToResponse(err),
-                        r => Ok((r: ApiResponse).asJson.noSpaces)
-                    )
-                )
-          }
-        }
+      case req @ POST -> Root / "tx" ⇒
+        req.as[Array[Byte]].map(TxRequest)
     }
   }
+
+  // TODO move it away
+  def handleRequest[F[_]: Functor: Log](
+    worker: Worker[F, _ <: HList]
+  ): PartialFunction[ApiRequest, EitherT[F, ApiErrorT, ApiResponse]] = {
+    case QueryRequest(path) ⇒
+      worker.machine
+        .query(path)
+        .bimap(
+          e => EffectApiError("", e): ApiErrorT,
+          r => QueryResponse(new String(r.result))
+        )
+
+    case TxRequest(tx) ⇒
+      worker.producer
+        .sendTx(tx)
+        .leftMap(e => EffectApiError("", e): ApiErrorT)
+        .map(r => TxResponseNew(r.code, r.info, r.height))
+  }
+
 }
