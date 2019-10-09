@@ -19,16 +19,20 @@ package fluence.node
 import cats.Parallel
 import cats.data.Kleisli
 import cats.effect._
+import cats.syntax.semigroupk._
+import fluence.bp.api.BlockProducer
 import fluence.kad.http.KademliaHttp
 import fluence.kad.http.dht.DhtHttp
 import fluence.log.LogFactory
 import fluence.node.status.{StatusAggregator, StatusHttp}
 import fluence.node.workers.WorkersPorts
-import fluence.node.workers.api.WorkersHttp
+import fluence.node.workers.api.{BasicHttp, SendAndWaitHttp, WorkerHttp}
+import fluence.statemachine.api.StateMachine
 import fluence.worker.WorkersPool
 import fluence.worker.responder.WorkerResponder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.blaze._
+import org.http4s.implicits._
 import org.http4s.server.middleware.{CORS, CORSConfig}
 import org.http4s.server.{Router, Server}
 import org.http4s.{HttpApp, Request, Response, Status}
@@ -63,13 +67,17 @@ object MasterHttp {
     dht: List[DhtHttp[F]] = Nil
   )(
     implicit p2p: ops.hlist.Selector[RS, WorkersPorts.P2pPort[F]],
-    resp: ops.hlist.Selector[CS, WorkerResponder[F]]
+    wr: ops.hlist.Selector[CS, WorkerResponder[F]],
+    bp: ops.hlist.Selector[CS, BlockProducer[F]],
+    sm: ops.hlist.Selector[CS, StateMachine[F]]
   ): Resource[F, Server[F]] = {
     implicit val dsl: Http4sDsl[F] = Http4sDsl[F]
 
+    val appsServices = BasicHttp.routes(pool).<+>(SendAndWaitHttp.routes(pool)).<+>(WorkerHttp.routes(pool))
+
     val routes = Router[F](
       ("/status" -> StatusHttp.routes[F](agg)) ::
-        ("/apps" -> WorkersHttp.routes(pool)) ::
+        ("/apps" -> appsServices) ::
         ("/kad" -> kad.routes()) ::
         dht.map(dhtHttp ⇒ dhtHttp.prefix -> dhtHttp.routes()): _*
     )
@@ -80,7 +88,7 @@ object MasterHttp {
           .getOrElse(
             Response(Status.NotFound)
               .withEntity(s"Route for ${a.method} ${a.pathInfo} ${a.params.mkString("&")} not found")
-          )
+        )
     )
 
     val app: HttpApp[F] = CORS[F, F](routesOrNotFound, corsConfig)

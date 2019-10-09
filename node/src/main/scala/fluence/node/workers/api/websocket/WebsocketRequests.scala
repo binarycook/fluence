@@ -16,11 +16,16 @@
 
 package fluence.node.workers.api.websocket
 
+import fluence.node.workers.api.{ApiRequest, ApiResponse}
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveConfiguredDecoder, deriveConfiguredEncoder}
 
 object WebsocketRequests {
+
+//  case class WebsocketRequest[T <: ApiRequest](id: String, request: T)
+//  case class WebsocketResponse[T <: ApiResponse](id: String, response: T)
+
   sealed trait WebsocketRequest {
     def requestId: String
   }
