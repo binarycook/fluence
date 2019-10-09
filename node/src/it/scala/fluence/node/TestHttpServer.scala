@@ -45,7 +45,7 @@ object TestHttpServer {
           .getOrElse(
             Response(Status.NotFound)
               .withEntity(s"Route for ${a.method} ${a.pathInfo} ${a.params.mkString("&")} not found")
-        )
+          )
     )
 
     val app: HttpApp[F] = routesOrNotFound

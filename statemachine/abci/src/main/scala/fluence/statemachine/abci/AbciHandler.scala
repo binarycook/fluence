@@ -27,26 +27,45 @@ import com.github.jtendermint.jabci.socket.TSocket
 import com.github.jtendermint.jabci.types._
 import com.google.protobuf.ByteString
 import fluence.bp.tx._
+import fluence.effects.tendermint.block.protobuf.ProtobufConverter
 import fluence.log.{Log, LogFactory}
+import fluence.statemachine.abci.block.BlockCollector
 import fluence.statemachine.abci.peers.{DropPeer, PeersControlBackend}
 import fluence.statemachine.api.StateMachine
 import fluence.statemachine.api.command.TxProcessor
+import fluence.statemachine.api.data.Commit
 import fluence.statemachine.api.query.QueryResponse
 import io.circe.syntax._
 import shapeless._
 
+import scala.collection.JavaConverters._
 import scala.language.higherKinds
 import scala.util.Try
 
 class AbciHandler[F[_]: Effect: LogFactory] private (
   machine: StateMachine[F],
   peersControl: PeersControlBackend[F],
-  txHandler: TxProcessor[F]
+  txHandler: TxProcessor[F],
+  blockCollector: BlockCollector[F]
 ) extends ICheckTx with IDeliverTx with ICommit with IQuery with IEndBlock with IBeginBlock {
 
   override def requestBeginBlock(
     req: RequestBeginBlock
-  ): ResponseBeginBlock = ResponseBeginBlock.newBuilder().build()
+  ): ResponseBeginBlock = {
+    import fluence.effects.tendermint.block.data.SimpleJsonCodecs.Encoders.blockEncoder
+
+    (for {
+      log: Log[F] <- LogFactory[F].init("abci", "requestBeginBlock")
+      _ <- blockCollector.addBlockId(Option(req.getHeader.getLastBlockId))
+      _ <- blockCollector.addVotes(req.getLastCommitInfo.getVotesList.asScala.map(_.getFullVote).toList)
+      block <- blockCollector.getBlock()
+      _ <- blockCollector.addHeader(req.getHeader)
+      validated = block.flatMap(_.validateHashes())
+      _ = block.map(b => println(b.block.asJson.spaces2))
+      _ <- log.info(s"Block ${req.getHeader.getHeight} validated: ${validated.fold(_.toString, _ => "OK")}")
+      // _ <- send(block)
+    } yield ResponseBeginBlock.newBuilder().build()).toIO.unsafeRunSync()
+  }
 
   private def handleTxResponse(tx: Array[Byte], resp: TxResponse)(implicit log: Log[F]): F[Unit] = {
     val TxResponse(code, info, height) = resp
@@ -122,8 +141,8 @@ class AbciHandler[F[_]: Effect: LogFactory] private (
     implicit val log: Log[F] = LogFactory[F].init("abci", "requestCommit").toIO.unsafeRunSync()
 
     txHandler.commit.value.flatMap {
-      case Right(stateHash) ⇒
-        stateHash.hash.toArray.pure[F]
+      case Right(Commit(_, hash, txs)) ⇒
+        blockCollector.addTxs(txs).as(hash.toArray)
       case Left(err) ⇒
         Sync[F].raiseError[Array[Byte]](err)
     }.map(ByteString.copyFrom)
@@ -205,7 +224,8 @@ object AbciHandler {
   def make[F[_]: Log: LogFactory: Effect, C <: HList](
     abciPort: Int,
     machine: StateMachine.Aux[F, C],
-    peersControl: PeersControlBackend[F]
+    peersControl: PeersControlBackend[F],
+    blockCollector: BlockCollector[F]
   )(
     implicit txp: ops.hlist.Selector[C, TxProcessor[F]]
   ): Resource[F, Unit] =
@@ -213,7 +233,7 @@ object AbciHandler {
       .make(
         Log[F].info("Starting State Machine ABCI handler") >>
           Sync[F].delay {
-            val handler = apply[F, C](machine, peersControl)
+            val handler = apply[F, C](machine, peersControl, blockCollector)
 
             val socket = new TSocket
             socket.registerListener(handler)
@@ -239,9 +259,10 @@ object AbciHandler {
    */
   def apply[F[_]: Log: LogFactory: Effect, C <: HList](
     machine: StateMachine.Aux[F, C],
-    peersControl: PeersControlBackend[F]
+    peersControl: PeersControlBackend[F],
+    blockCollector: BlockCollector[F]
   )(
     implicit txp: ops.hlist.Selector[C, TxProcessor[F]]
   ): AbciHandler[F] =
-    new AbciHandler[F](machine, peersControl, machine.command[TxProcessor[F]])
+    new AbciHandler[F](machine, peersControl, machine.command[TxProcessor[F]], blockCollector)
 }

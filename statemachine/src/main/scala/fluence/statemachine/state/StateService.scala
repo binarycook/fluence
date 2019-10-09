@@ -32,7 +32,7 @@ import fluence.crypto.Crypto.Hasher
 import fluence.crypto.hash.JdkCryptoHasher
 import fluence.log.Log
 import fluence.statemachine.api.query.{QueryCode, QueryResponse}
-import fluence.statemachine.api.data.{BlockReceipt, StateHash}
+import fluence.statemachine.api.data.{BlockReceipt, Commit, StateHash}
 import fluence.statemachine.receiptbus.ReceiptBusBackend
 import fluence.statemachine.vm.VmOperationInvoker
 import scodec.bits.ByteVector
@@ -55,7 +55,7 @@ trait StateService[F[_]] {
    *
    * @return App Hash (with receipt hash applied!)
    */
-  def commit(implicit log: Log[F]): F[StateHash]
+  def commit(implicit log: Log[F]): F[Commit]
 
   /**
    * Queries the storage for sessionId/nonce result, or for sessionId status.
@@ -99,7 +99,7 @@ class StateServiceImpl[F[_]: Monad](
 
   def stateHash: F[StateHash] = state.get.map(_.stateHash)
 
-  def commit(implicit log: Log[F]): F[StateHash] =
+  def commit(implicit log: Log[F]): F[Commit] =
     for {
       // Get current state
       currentState <- state.get
@@ -176,12 +176,10 @@ class StateServiceImpl[F[_]: Monad](
 
       _ <- traceBU("state.set done")
 
-      stateHash = StateHash(blockHeight, appHash)
-
       // Store vmHash
       _ <- receiptBusBackend.enqueueVmHash(blockHeight, vmHash)
       _ <- log.info(s"$blockHeight commit end")
-    } yield stateHash
+    } yield Commit(blockHeight, appHash, transactions)
 
   def query(path: String): F[QueryResponse] =
     Tx.readHead(path) match {

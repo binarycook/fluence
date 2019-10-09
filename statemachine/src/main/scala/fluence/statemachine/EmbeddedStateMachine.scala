@@ -16,18 +16,18 @@
 
 package fluence.statemachine
 
-import cats.{Functor, Monad}
+import cats.Functor
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.{ConcurrentEffect, Sync}
-import cats.syntax.functor._
-import cats.syntax.flatMap._
 import cats.syntax.apply._
+import cats.syntax.flatMap._
+import cats.syntax.functor._
 import fluence.bp.tx.TxResponse
 import fluence.effects.EffectError
 import fluence.log.Log
 import fluence.statemachine.api.StateMachine
 import fluence.statemachine.api.command._
-import fluence.statemachine.api.data.{StateHash, StateMachineStatus}
+import fluence.statemachine.api.data.{Commit, StateHash, StateMachineStatus}
 import fluence.statemachine.api.query.QueryResponse
 import fluence.statemachine.error.StateMachineError
 import fluence.statemachine.receiptbus.ReceiptBusBackend
@@ -72,7 +72,7 @@ object EmbeddedStateMachine {
           override def checkTx(txData: Array[Byte])(implicit log: Log[F]): EitherT[F, EffectError, TxResponse] =
             EitherT right stateService.checkTx(txData)
 
-          override def commit()(implicit log: Log[F]): EitherT[F, EffectError, StateHash] =
+          override def commit()(implicit log: Log[F]): EitherT[F, EffectError, Commit] =
             EitherT right stateService.commit
         }
       )

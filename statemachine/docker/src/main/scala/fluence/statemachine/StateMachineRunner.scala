@@ -22,6 +22,7 @@ import cats.effect.{Concurrent, ExitCode, IO, IOApp}
 import cats.syntax.flatMap._
 import fluence.log.{Log, LogFactory}
 import fluence.statemachine.abci.AbciHandler
+import fluence.statemachine.abci.block.BlockCollector
 import fluence.statemachine.abci.peers.PeersControlBackend
 import fluence.statemachine.api.StateMachine
 import fluence.statemachine.api.command.{PeersControl, ReceiptBus}
@@ -70,9 +71,10 @@ object StateMachineRunner extends IOApp {
               e ⇒ IO.fromEither(e.left.map(err ⇒ new RuntimeException(s"Cannot initiate EmbeddedStateMachine: $err")))
             )
 
+          blockCollector <- BlockCollector[IO]
           _ <- (
             for {
-              _ ← AbciHandler.make(config.abciPort, machine, peersBackend)
+              _ ← AbciHandler.make(config.abciPort, machine, peersBackend, blockCollector)
 
               _ ← BlazeServerBuilder[IO]
                 .bindHttp(config.http.port, config.http.host)

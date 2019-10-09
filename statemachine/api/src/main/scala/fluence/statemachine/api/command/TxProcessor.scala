@@ -20,12 +20,12 @@ import cats.data.EitherT
 import fluence.bp.tx.TxResponse
 import fluence.effects.EffectError
 import fluence.log.Log
-import fluence.statemachine.api.data.StateHash
+import fluence.statemachine.api.data.Commit
 
 import scala.language.higherKinds
 
 /**
- * Command side for changing the State machine internal state by passing and processing transactions, and commiting blocks.
+ * Command side for changing the State machine internal state by passing and processing transactions, and committing blocks.
  * Should be used to connect to a low-level block producer, e.g. a Tendermint node with ABCI interface.
  * This interface is not intended to be extended to cover more functionality (e.g. reconstructing Tendermint blocks).
  *
@@ -49,6 +49,6 @@ trait TxProcessor[F[_]] {
   /**
    * Finish block handling, update state hash
    */
-  def commit()(implicit log: Log[F]): EitherT[F, EffectError, StateHash]
+  def commit()(implicit log: Log[F]): EitherT[F, EffectError, Commit]
 
 }

@@ -28,7 +28,7 @@ import fluence.log.appender.PrintlnLogAppender
 import fluence.log.{Log, LogFactory}
 import fluence.statemachine.api.StateMachine
 import fluence.statemachine.api.command.TxProcessor
-import fluence.statemachine.api.data.{StateHash, StateMachineStatus}
+import fluence.statemachine.api.data.{Commit, StateHash, StateMachineStatus}
 import fluence.statemachine.api.query.{QueryCode, QueryResponse}
 import fluence.worker.Worker
 import fluence.worker.responder.resp._
@@ -71,8 +71,8 @@ class SendAndWaitSpec extends WordSpec with Matchers with BeforeAndAfterAll with
       override def checkTx(txData: Array[Byte])(implicit log: Log[IO]): EitherT[IO, EffectError, TxResponse] =
         EitherT.rightT(TxResponse(TxCode.OK, ""))
 
-      override def commit()(implicit log: Log[IO]): EitherT[IO, EffectError, StateHash] =
-        EitherT.right(IO(StateHash(1, ByteVector.empty)))
+      override def commit()(implicit log: Log[IO]): EitherT[IO, EffectError, Commit] =
+        EitherT.right(IO(Commit(1, ByteVector.empty, Nil)))
     })
 
   private val producer = (EmbeddedBlockProducer.apply[IO, TxProcessor[IO] :: HNil](_)).andThen(Resource.liftF(_))

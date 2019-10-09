@@ -12,7 +12,7 @@ import fluence.node.workers.WorkersPorts
 import fluence.statemachine.EmbeddedStateMachine
 import fluence.statemachine.abci.peers.PeersControlBackend
 import fluence.statemachine.api.command.PeersControl
-import fluence.statemachine.api.data.{StateHash, StateMachineStatus}
+import fluence.statemachine.api.data.{Commit, StateHash, StateMachineStatus}
 import fluence.statemachine.api.query.QueryResponse
 import fluence.statemachine.receiptbus.ReceiptBusBackend
 import fluence.statemachine.state.StateService
@@ -25,7 +25,7 @@ import scala.language.higherKinds
 // TODO use default StateService with embedded VM, never mock it
 class TestStateService[F[_]] extends StateService[F] {
   override def stateHash: F[StateHash] = throw new NotImplementedError("def stateHash")
-  override def commit(implicit log: Log[F]): F[StateHash] = throw new NotImplementedError("def commit")
+  override def commit(implicit log: Log[F]): F[Commit] = throw new NotImplementedError("def commit")
   override def query(path: String): F[QueryResponse] = throw new NotImplementedError("def path")
   override def deliverTx(data: Array[Byte])(implicit log: Log[F]): F[TxResponse] =
     throw new NotImplementedError("def deliverTx")
@@ -41,16 +41,18 @@ object EmbeddedWorkerPool {
   def embedded[F[_]: ConcurrentEffect: Timer: Parallel](ports: WorkersPorts[F])(
     implicit backoff: Backoff[EffectError],
     log: Log[F]
-  ): Resource[F,WorkersPool[F, Resources[F], Companions[F]]] = {
+  ): Resource[F, WorkersPool[F, Resources[F], Companions[F]]] = {
 
     def embeddedWorker(app: EthApp): Resources[F] ⇒ Resource[F, Worker[F, Companions[F]]] = { res ⇒
       Resource.liftF(
         for {
           backend <- PeersControlBackend[F].map(a => a: PeersControl[F])
           receiptBus ← ReceiptBusBackend[F](false)
-          machine = EmbeddedStateMachine(receiptBus,
-                                         new TestStateService[F](),
-                                         StateMachineStatus(false, StateHash.empty)).extend(backend)
+          machine = EmbeddedStateMachine(
+            receiptBus,
+            new TestStateService[F](),
+            StateMachineStatus(false, StateHash.empty)
+          ).extend(backend)
           producer <- EmbeddedBlockProducer(machine)
         } yield
           Worker(

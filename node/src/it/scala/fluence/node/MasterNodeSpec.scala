@@ -101,10 +101,12 @@ class MasterNodeSpec
     implicit log: Log[IO]
   ): Resource[
     IO,
-    (SttpStreamEffect[IO],
-     MasterNode[IO, EmbeddedWorkerPool.Companions[IO]],
-     ValidatorPublicKey,
-     Kademlia[IO, UriContact])
+    (
+      SttpStreamEffect[IO],
+      MasterNode[IO, EmbeddedWorkerPool.Companions[IO]],
+      ValidatorPublicKey,
+      Kademlia[IO, UriContact]
+    )
   ] =
     for {
       implicit0(sttpB: SttpStreamEffect[IO]) ← SttpEffect.streamResource[IO]
@@ -145,11 +147,15 @@ class MasterNodeSpec
 
   def runningNode(port: Short = 5789, seeds: Seq[String] = Seq.empty)(
     implicit log: Log[IO]
-  ): Resource[IO,
-              (SttpStreamEffect[IO],
-               MasterNode[IO, EmbeddedWorkerPool.Companions[IO]],
-               ValidatorPublicKey,
-               Kademlia[IO, UriContact])] =
+  ): Resource[
+    IO,
+    (
+      SttpStreamEffect[IO],
+      MasterNode[IO, EmbeddedWorkerPool.Companions[IO]],
+      ValidatorPublicKey,
+      Kademlia[IO, UriContact]
+    )
+  ] =
     nodeResource(port, seeds).flatMap {
       case res @ (_, n, _, _) ⇒ fiberResource(n.run).as(res)
     }

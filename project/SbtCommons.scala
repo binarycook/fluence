@@ -192,6 +192,8 @@ object SbtCommons {
 
   val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "2.8.1"
 
+  val jabci = "com.github.jtendermint" % "jabci" % "0.32.3.1"
+
   /* Test deps*/
   val scalacheckShapeless = "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8"     % Test
   val catsTestkit = "org.typelevel"                      %% "cats-testkit"              % catsVersion % Test

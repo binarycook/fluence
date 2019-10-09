@@ -27,7 +27,7 @@ lazy val `vm` = (project in file("vm"))
       scalaTest,
       scalaIntegrationTest,
       mockito
-    ),
+    )
   )
   .settings(itDepends(test)(downloadLlama, compileFrank)(Test, IntegrationTest): _*)
   .settings(itDepends(testOnly)(downloadLlama, compileFrank)(Test, IntegrationTest): _*)
@@ -94,11 +94,11 @@ lazy val `statemachine-abci` = (project in file("statemachine/abci"))
   .settings(
     commons,
     libraryDependencies ++= Seq(
-      "com.github.jtendermint" % "jabci" % "0.26.0"
+      jabci
     )
   )
   .enablePlugins(AutomateHeaderPlugin)
-  .dependsOn(`statemachine-api`)
+  .dependsOn(`statemachine-api`, `tendermint-block`)
 
 lazy val `statemachine-docker` = (project in file("statemachine/docker"))
   .settings(
@@ -116,7 +116,7 @@ lazy val `statemachine-docker` = (project in file("statemachine/docker"))
     docker in Test                    := (docker in Test).dependsOn(assembly).value,
     assembly                          := assembly.dependsOn(makeFrankSo).value,
     itDepends(test)(downloadLlama, compileFrank)(Test),
-    itDepends(testOnly)(downloadLlama, compileFrank)(Test),
+    itDepends(testOnly)(downloadLlama, compileFrank)(Test)
   )
   .enablePlugins(AutomateHeaderPlugin)
   .dependsOn(`statemachine-http`, `statemachine-abci`, `statemachine`, `sttp-effect` % Test)
@@ -513,7 +513,7 @@ lazy val `node` = project
     test in assembly                       := {},
     docker                                 := { runCmd(s"make node TAG=v${version.value}") },
     docker in Test                         := { runCmd("make node-test") },
-    docker in Test                         := (docker in Test).dependsOn(assembly).value,
+    docker in Test                         := (docker in Test).dependsOn(assembly).value
   )
   .settings(
     {
@@ -564,10 +564,10 @@ lazy val `node-testkit` = (project in file("node/testkit"))
     )
   )
   .dependsOn(
-    `node`           % "test->test",
-    `node`           % "test->it",
-    `statemachine`   % "test->test",
-    `tendermint-rpc` % "test->test",
+    `node`             % "test->test",
+    `node`             % "test->it",
+    `statemachine`     % "test->test",
+    `tendermint-rpc`   % "test->test",
     `worker-responder` % "test->test"
   )
   .enablePlugins(AutomateHeaderPlugin)

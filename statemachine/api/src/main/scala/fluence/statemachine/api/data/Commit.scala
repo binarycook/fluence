@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package fluence.effects.tendermint.block.errors
+package fluence.statemachine.api.data
 
-object ValidationError {
-  sealed trait ValidationError extends TendermintBlockError
-  case class InvalidDataHash(expected: String, actual: String) extends ValidationError {
-    override def getMessage: String = s"expected: $expected, actual: $actual"
-  }
-  case class InvalidCommitHash(expected: String, actual: String) extends ValidationError {
-    override def getMessage: String = s"expected: $expected, actual: $actual"
-  }
-}
+import fluence.bp.tx.Tx
+import scodec.bits.ByteVector
+
+/**
+ * Result of calling StateService.commit
+ *
+ * @param height Height of the block commit was executed for
+ * @param stateHash Hash of the state after executing all transactions for this block
+ * @param txs List of all transaction included in this block
+ */
+case class Commit(height: Long, stateHash: ByteVector, txs: List[Tx])
