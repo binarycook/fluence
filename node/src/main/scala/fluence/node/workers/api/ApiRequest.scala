@@ -18,12 +18,14 @@ package fluence.node.workers.api
 
 import fluence.bp.tx.TxCode
 import fluence.effects.EffectError
+import fluence.worker.WorkerStage
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 
 import scala.language.higherKinds
 
 sealed trait ApiErrorT
+case class NoAppError(appId: Long, stage: WorkerStage) extends ApiErrorT
 case class UnexpectedApiError(message: String, throwable: Throwable) extends ApiErrorT
 case class EffectApiError(message: String, effectError: EffectError) extends ApiErrorT
 case class ApiError(message: String) extends ApiErrorT

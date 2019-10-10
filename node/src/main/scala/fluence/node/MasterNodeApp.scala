@@ -45,6 +45,8 @@ import fluence.log.{Log, LogFactory}
 import fluence.node.config.{Configuration, MasterConfig}
 import fluence.node.eth.NodeEth
 import fluence.node.status.StatusAggregator
+import fluence.node.workers.api.{RequestHandler, RequestHandlerImpl}
+import org.http4s.server.Server
 
 import scala.language.higherKinds
 
@@ -129,7 +131,7 @@ object MasterNodeApp extends IOApp {
                   .lmap[KeyPair.Public](_.bytes) >>> Key.sha1
               )
             }
-          )
+        )
       )
 
   private def receiptsDht(
@@ -150,19 +152,19 @@ object MasterNodeApp extends IOApp {
     nodeEth: NodeEth[IO],
     kademliaHttp: KademliaHttp[IO, UriContact],
     receiptDhtHttp: DhtHttp[IO]
-  )(implicit log: Log[IO], lf: LogFactory[IO]) =
-    StatusAggregator
-      .make(masterConf, pool, nodeEth)
-      .flatMap(
-        statusAggregator =>
-          Log.resource[IO].info("Going to make MasterHttp") >>
-            MasterHttp.make(
-              "0.0.0.0",
-              masterConf.httpApi.port.toShort,
-              statusAggregator,
-              pool,
-              kademliaHttp,
-              receiptDhtHttp :: Nil
-            )
+  )(implicit log: Log[IO], lf: LogFactory[IO]): Resource[IO, Server[IO]] =
+    for {
+      statusAggregator <- StatusAggregator.make(masterConf, pool, nodeEth)
+      _ <- Log.resource[IO].info("Going to make MasterHttp")
+      requestHandler = new RequestHandlerImpl(pool)
+      masterHttp <- MasterHttp.make(
+        "0.0.0.0",
+        masterConf.httpApi.port.toShort,
+        statusAggregator,
+        pool,
+        requestHandler,
+        kademliaHttp,
+        receiptDhtHttp :: Nil
       )
+    } yield masterHttp
 }

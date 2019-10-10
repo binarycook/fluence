@@ -39,8 +39,7 @@ object ManagementHttp {
     pool: WorkersPool[F, RS, CS]
   )(
     implicit dsl: Http4sDsl[F],
-    p2p: ops.hlist.Selector[RS, WorkersPorts.P2pPort[F]],
-    resp: ops.hlist.Selector[CS, WorkerResponder[F]]
+    p2p: ops.hlist.Selector[RS, WorkersPorts.P2pPort[F]]
   ): HttpRoutes[F] = {
     import dsl._
 

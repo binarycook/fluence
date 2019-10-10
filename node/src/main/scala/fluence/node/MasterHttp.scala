@@ -19,12 +19,13 @@ package fluence.node
 import cats.Parallel
 import cats.data.Kleisli
 import cats.effect._
+import cats.syntax.semigroupk._
 import fluence.kad.http.KademliaHttp
 import fluence.kad.http.dht.DhtHttp
 import fluence.log.LogFactory
 import fluence.node.status.{StatusAggregator, StatusHttp}
 import fluence.node.workers.WorkersPorts
-import fluence.node.workers.api.ManagementHttp
+import fluence.node.workers.api.{ManagementHttp, RequestHandler, WorkerHttp}
 import fluence.worker.WorkersPool
 import fluence.worker.responder.WorkerResponder
 import org.http4s.dsl.Http4sDsl
@@ -59,6 +60,7 @@ object MasterHttp {
     port: Short,
     agg: StatusAggregator[F],
     pool: WorkersPool[F, RS, CS],
+    requestHandler: RequestHandler[F],
     kad: KademliaHttp[F, _],
     dht: List[DhtHttp[F]] = Nil
   )(
@@ -69,7 +71,7 @@ object MasterHttp {
 
     val routes = Router[F](
       ("/status" -> StatusHttp.routes[F](agg)) ::
-        ("/apps" -> ManagementHttp.routes(pool)) ::
+        ("/apps" -> ManagementHttp.routes(pool).<+>(WorkerHttp.routes(requestHandler))) ::
         ("/kad" -> kad.routes()) ::
         dht.map(dhtHttp ⇒ dhtHttp.prefix -> dhtHttp.routes()): _*
     )
