@@ -55,15 +55,6 @@ abstract class WorkerContext[F[_]: Functor, R, CS <: HList](
 ) {
 
   /**
-   * Pick a Worker Companion, if Worker is running, or report current non-active WorkerStage
-   *
-   * @tparam C Companion type
-   * @return WorkerStage if worker is not launched, or Companion instance
-   */
-  def companion[C](implicit c: ops.hlist.Selector[CS, C]): EitherT[F, WorkerStage, C] =
-    worker.map(_.companion[C])
-
-  /**
    * Trigger Worker stop, releasing all acquired resources.
    * Stopping is performed asynchronously, you can track it with [[stage]]
    *
@@ -117,42 +108,43 @@ object WorkerContext {
                     Resource.liftF(
                       workerDef.complete(w) *>
                         setStage(WorkerStage.FullyAllocated)
-                    )
-                )
+                  )
+              )
         )
 
         stage = stageRef.get
 
-      } yield new WorkerContext[F, R, CS](
-        stage,
-        stageQueue.subscribe(1),
-        app,
-        res,
-        EitherT(stage.flatMap {
-          case s if s.running ⇒ workerDef.get.map(_.asRight)
-          case s ⇒ s.asLeft[Worker[F, CS]].pure[F]
-        })
-      ) {
-        override def stop()(implicit log: Log[F]): F[Unit] =
-          stage.flatMap {
-            case s if s.running ⇒
-              log.info(s"Stopping worker ${app.id}") >>
-                setStage(WorkerStage.Stopping) >>
-                stopDef.get.flatten
-            case _ ⇒
-              log.debug(s"Worker ${app.id} is already stopped")
-          }
+      } yield
+        new WorkerContext[F, R, CS](
+          stage,
+          stageQueue.subscribe(1),
+          app,
+          res,
+          EitherT(stage.flatMap {
+            case s if s.running ⇒ workerDef.get.map(_.asRight)
+            case s ⇒ s.asLeft[Worker[F, CS]].pure[F]
+          })
+        ) {
+          override def stop()(implicit log: Log[F]): F[Unit] =
+            stage.flatMap {
+              case s if s.running ⇒
+                log.info(s"Stopping worker ${app.id}") >>
+                  setStage(WorkerStage.Stopping) >>
+                  stopDef.get.flatten
+              case _ ⇒
+                log.debug(s"Worker ${app.id} is already stopped")
+            }
 
-        // TODO: if it's already destroyed, we can't return a Fiber
-        override def destroy()(implicit log: Log[F]): F[Fiber[F, Unit]] =
-          log.info(s"Going to destroy worker ${app.id}") >>
-            stop() >>
-            Concurrent[F].start(
-              setStage(WorkerStage.Destroying) >>
-                workerResource.destroy().value.void >>
-                setStage(WorkerStage.Destroyed)
-            )
-      }
+          // TODO: if it's already destroyed, we can't return a Fiber
+          override def destroy()(implicit log: Log[F]): F[Fiber[F, Unit]] =
+            log.info(s"Going to destroy worker ${app.id}") >>
+              stop() >>
+              Concurrent[F].start(
+                setStage(WorkerStage.Destroying) >>
+                  workerResource.destroy().value.void >>
+                  setStage(WorkerStage.Destroyed)
+              )
+        }
 
     }
 }

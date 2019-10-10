@@ -31,7 +31,7 @@ import scala.util.Try
  * @param code Reference to the application code in a decentralized storage
  * @param cluster A cluster that hosts this App
  */
-case class EthApp private[eth] (
+case class EthApp(
   id: Long,
   code: StorageRef,
   cluster: Cluster

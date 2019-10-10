@@ -46,7 +46,7 @@ import scala.language.higherKinds
  * @tparam F Effect
  * @tparam CS Companions type
  */
-abstract class Worker[F[_], CS <: HList](
+class Worker[F[_], CS <: HList](
 // TODO why should we need it?
   val appId: Long,
   protected val companions: CS,
@@ -70,7 +70,23 @@ abstract class Worker[F[_], CS <: HList](
    */
   def status(
     timeout: FiniteDuration
-  )(implicit log: Log[F], timer: Timer[F], c: Concurrent[F], p: Parallel[F]): F[WorkerStatus]
+  )(implicit log: Log[F], timer: Timer[F], c: Concurrent[F], p: Parallel[F]): F[WorkerStatus] = {
+    val sleep = Timer[F].sleep(timeout).as(s"Status timed out after $timeout")
+    def ask[T](e: EitherT[F, EffectError, T]) = c.race(sleep, e.leftMap(_.toString).value).map(_.flatten)
+
+    p.sequential(
+      p.apply.map2(
+        p.parallel(ask(machine.status())),
+        p.parallel(ask(producer.status()))
+      ) {
+        case (Right(machineStatus), Right(producerStatus)) ⇒
+          WorkerOperating(machineStatus, producerStatus)
+
+        case (machineEither, producerEither) ⇒
+          WorkerFailing(machineEither, producerEither)
+      }
+    )
+  }
 
   /**
    * Map upon Worker's companions.
@@ -79,12 +95,7 @@ abstract class Worker[F[_], CS <: HList](
    * @param fn Function to call on companions
    * @tparam CC Result companions type
    */
-  def map[CC <: HList](fn: CS ⇒ CC): Worker[F, CC] = new Worker[F, CC](appId, fn(companions), machine, producer) {
-    override def status(
-      timeout: FiniteDuration
-    )(implicit log: Log[F], timer: Timer[F], c: Concurrent[F], p: Parallel[F]): F[WorkerStatus] =
-      self.status(timeout)
-  }
+  def map[CC <: HList](fn: CS ⇒ CC): Worker[F, CC] = new Worker[F, CC](appId, fn(companions), machine, producer)
 }
 
 object Worker {
@@ -95,27 +106,5 @@ object Worker {
     producer: BlockProducer[F],
     companions: C
   ): Worker[F, C] =
-    new Worker[F, C](appId, companions, machine, producer) {
-
-      def status(
-        timeout: FiniteDuration
-      )(implicit log: Log[F], timer: Timer[F], c: Concurrent[F], p: Parallel[F]): F[WorkerStatus] = {
-        val sleep = Timer[F].sleep(timeout).as(s"Status timed out after $timeout")
-        def ask[T](e: EitherT[F, EffectError, T]) = c.race(sleep, e.leftMap(_.toString).value).map(_.flatten)
-
-        p.sequential(
-          p.apply.map2(
-            p.parallel(ask(machine.status())),
-            p.parallel(ask(producer.status()))
-          ) {
-            case (Right(machineStatus), Right(producerStatus)) ⇒
-              WorkerOperating(machineStatus, producerStatus)
-
-            case (machineEither, producerEither) ⇒
-              WorkerFailing(machineEither, producerEither)
-          }
-        )
-      }
-
-    }
+    new Worker[F, C](appId, companions, machine, producer)
 }
