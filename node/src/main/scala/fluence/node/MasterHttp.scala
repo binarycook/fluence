@@ -24,7 +24,7 @@ import fluence.kad.http.dht.DhtHttp
 import fluence.log.LogFactory
 import fluence.node.status.{StatusAggregator, StatusHttp}
 import fluence.node.workers.WorkersPorts
-import fluence.node.workers.api.WorkerHttp
+import fluence.node.workers.api.ManagementHttp
 import fluence.worker.WorkersPool
 import fluence.worker.responder.WorkerResponder
 import org.http4s.dsl.Http4sDsl
@@ -69,7 +69,7 @@ object MasterHttp {
 
     val routes = Router[F](
       ("/status" -> StatusHttp.routes[F](agg)) ::
-        ("/apps" -> WorkerHttp.routes(pool)) ::
+        ("/apps" -> ManagementHttp.routes(pool)) ::
         ("/kad" -> kad.routes()) ::
         dht.map(dhtHttp ⇒ dhtHttp.prefix -> dhtHttp.routes()): _*
     )
@@ -80,7 +80,7 @@ object MasterHttp {
           .getOrElse(
             Response(Status.NotFound)
               .withEntity(s"Route for ${a.method} ${a.pathInfo} ${a.params.mkString("&")} not found")
-          )
+        )
     )
 
     val app: HttpApp[F] = CORS[F, F](routesOrNotFound, corsConfig)

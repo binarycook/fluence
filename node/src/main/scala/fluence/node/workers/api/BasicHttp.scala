@@ -40,10 +40,10 @@ object BasicHttp {
     object QueryPath extends QueryParamDecoderMatcher[String]("path")
 
     {
-      case GET -> Root / "query" :? QueryPath(path) ⇒
+      case GET -> Root / _ / "query" :? QueryPath(path) ⇒
         Applicative[F].pure(QueryRequest(path))
 
-      case req @ POST -> Root / "tx" ⇒
+      case req @ POST -> Root / _ / "tx" ⇒
         req.as[Array[Byte]].map(TxRequest)
     }
   }
