@@ -42,14 +42,14 @@ import scala.language.higherKinds
  *
  * @param stage Fast accessor to current WorkerStage
  * @param stages Stream of WorkerStage changes, can be instantiated several times
- * @param app EthApp for which this context is built
+ * @param appId Application id
  * @param resources Resources
  * @param worker Either current non-active WorkerStage, or fully initialized Worker
  */
 abstract class WorkerContext[F[_]: Functor, R, CS <: HList](
   val stage: F[WorkerStage],
   val stages: fs2.Stream[F, WorkerStage],
-  val app: EthApp,
+  val appId: Long,
   val resources: R,
   val worker: EitherT[F, WorkerStage, Worker[F, CS]]
 ) {
@@ -118,7 +118,7 @@ object WorkerContext {
         new WorkerContext[F, R, CS](
           stage,
           stageQueue.subscribe(1),
-          app,
+          app.id,
           res,
           EitherT(stage.flatMap {
             case s if s.running ⇒ workerDef.get.map(_.asRight)
@@ -128,16 +128,16 @@ object WorkerContext {
           override def stop()(implicit log: Log[F]): F[Unit] =
             stage.flatMap {
               case s if s.running ⇒
-                log.info(s"Stopping worker ${app.id}") >>
+                log.info(s"Stopping worker ${appId}") >>
                   setStage(WorkerStage.Stopping) >>
                   stopDef.get.flatten
               case _ ⇒
-                log.debug(s"Worker ${app.id} is already stopped")
+                log.debug(s"Worker ${appId} is already stopped")
             }
 
           // TODO: if it's already destroyed, we can't return a Fiber
           override def destroy()(implicit log: Log[F]): F[Fiber[F, Unit]] =
-            log.info(s"Going to destroy worker ${app.id}") >>
+            log.info(s"Going to destroy worker ${appId}") >>
               stop() >>
               Concurrent[F].start(
                 setStage(WorkerStage.Destroying) >>

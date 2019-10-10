@@ -95,7 +95,7 @@ object MasterPool {
           conf.worker,
           conf.dockerStopTimeout,
           conf.logLevel
-        )
+      )
 
       codeCarrier ← Resource.pure(CodeCarrier[F](conf.remoteStorage))
       workerFiles = WorkerFiles(rootPath, codeCarrier)
@@ -180,11 +180,11 @@ object MasterPool {
 
           responder ← WorkerResponder.make[F, producer.Commands, Block](producer, machine)
 
-        } yield Worker(
-          app.id,
-          machine,
-          producer,
-          machine.command[PeersControl[F]] :: responder :: HNil
+        } yield
+          Worker(
+            machine,
+            producer,
+            machine.command[PeersControl[F]] :: responder :: HNil
         )
 
     WorkersPool.make[F, Resources[F], Companions[F]] { (app, l) ⇒

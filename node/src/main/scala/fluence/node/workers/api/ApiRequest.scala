@@ -31,8 +31,8 @@ object ApiError {
   implicit val apiErrorEncoder: Encoder[ApiErrorT] = deriveEncoder[ApiErrorT]
 }
 case class NoAppError(appId: Long, stage: WorkerStage) extends ApiErrorT
-case class UnexpectedApiError(message: String, throwable: Throwable) extends ApiErrorT
-case class EffectApiError(message: String, effectError: EffectError) extends ApiErrorT
+case class UnexpectedApiError(message: String) extends ApiErrorT
+case class EffectApiError(message: String) extends ApiErrorT
 case class ApiError(message: String) extends ApiErrorT
 
 sealed trait ApiResponse

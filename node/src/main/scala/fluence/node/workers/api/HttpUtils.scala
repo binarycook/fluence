@@ -45,12 +45,12 @@ object HttpUtils {
   )(implicit log: Log[F], dsl: Http4sDsl[F]): F[Response[F]] = {
     import dsl._
     error match {
-      case UnexpectedApiError(message, err) =>
-        log.warn(s"RPC request failed", err) *>
-          InternalServerError(err.getMessage)
-      case EffectApiError(message, err) =>
-        log.warn(s"RPC request failed: $message", err) *>
-          InternalServerError(err.getMessage)
+      case UnexpectedApiError(message) =>
+        log.warn(s"RPC request failed:" + message) *>
+          InternalServerError(message)
+      case EffectApiError(message) =>
+        log.warn(s"RPC request failed: $message") *>
+          InternalServerError(message)
       case ApiError(message) =>
         log.warn(s"RPC request failed: $message") *>
           InternalServerError(message)

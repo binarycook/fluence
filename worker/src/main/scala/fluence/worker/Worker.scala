@@ -39,7 +39,6 @@ import scala.language.higherKinds
  * These Companions are built with access to internals of producer and machine, then acting as a facade for a
  * worker-associated logic and state changes.
  *
- * @param appId Application ID
  * @param companions Worker-specific companion services
  * @param machine State machine -- read model
  * @param producer Block producer -- write model
@@ -47,8 +46,6 @@ import scala.language.higherKinds
  * @tparam CS Companions type
  */
 class Worker[F[_], CS <: HList](
-// TODO why should we need it?
-  val appId: Long,
   protected val companions: CS,
   val machine: StateMachine[F],
   val producer: BlockProducer[F]
@@ -95,16 +92,15 @@ class Worker[F[_], CS <: HList](
    * @param fn Function to call on companions
    * @tparam CC Result companions type
    */
-  def map[CC <: HList](fn: CS ⇒ CC): Worker[F, CC] = new Worker[F, CC](appId, fn(companions), machine, producer)
+  def map[CC <: HList](fn: CS ⇒ CC): Worker[F, CC] = new Worker[F, CC](fn(companions), machine, producer)
 }
 
 object Worker {
 
   def apply[F[_]: Monad, C <: HList](
-    appId: Long,
     machine: StateMachine[F],
     producer: BlockProducer[F],
     companions: C
   ): Worker[F, C] =
-    new Worker[F, C](appId, companions, machine, producer)
+    new Worker[F, C](companions, machine, producer)
 }

@@ -60,14 +60,15 @@ case class StatusAggregator[F[_]: Timer: Concurrent](
                 WorkerNotAllocated(_).pure[F].widen[WorkerStatus],
                 w ⇒ w.status(statusTimeout)
               )
-              .map(ctx.app.id → _)
+              .map(ctx.appId → _)
         )
-    } yield MasterStatus(
-      config.endpoints.ip.getHostAddress,
-      currentTime - startTimeMillis,
-      workerInfos.size,
-      workerInfos
-    )
+    } yield
+      MasterStatus(
+        config.endpoints.ip.getHostAddress,
+        currentTime - startTimeMillis,
+        workerInfos.size,
+        workerInfos
+      )
 
   /**
    * Just an expected Ethereum state -- a granular accessor

@@ -41,7 +41,7 @@ object EmbeddedWorkerPool {
   def embedded[F[_]: ConcurrentEffect: Timer: Parallel](ports: WorkersPorts[F])(
     implicit backoff: Backoff[EffectError],
     log: Log[F]
-  ): Resource[F,WorkersPool[F, Resources[F], Companions[F]]] = {
+  ): Resource[F, WorkersPool[F, Resources[F], Companions[F]]] = {
 
     def embeddedWorker(app: EthApp): Resources[F] ⇒ Resource[F, Worker[F, Companions[F]]] = { res ⇒
       Resource.liftF(
@@ -54,7 +54,6 @@ object EmbeddedWorkerPool {
           producer <- EmbeddedBlockProducer(machine)
         } yield
           Worker(
-            app.id,
             machine,
             producer,
             machine.command[PeersControl[F]] :: HNil

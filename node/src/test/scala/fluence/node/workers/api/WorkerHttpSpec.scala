@@ -1,23 +1,15 @@
 package fluence.node.workers.api
 
+import cats.data.EitherT
 import cats.effect.concurrent.Ref
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{ContextShift, Fiber, IO, Timer}
 import fluence.log.{Log, LogFactory}
-import fluence.node.workers.{WorkerFiles, WorkersPorts}
-import fluence.statemachine.api.command.PeersControl
 import fluence.worker.eth.EthApp
 import fluence.worker.responder.WorkerResponder
-import fluence.worker.{WorkerContext, WorkersPool}
+import fluence.worker.{Worker, WorkerContext, WorkerStage, WorkersPool}
 import org.scalatest.{Matchers, WordSpec}
 import shapeless.{::, HNil}
-import cats.implicits._
-import io.circe._
-import io.circe.syntax._
-import io.circe.generic.semiauto._
-import cats.effect._
 import org.http4s._
-import org.http4s.circe._
-import org.http4s.dsl.io._
 import org.http4s.implicits._
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -33,6 +25,17 @@ class WorkerHttpSpec extends WordSpec with Matchers {
 
   type Resources = HNil
   type Companions = WorkerResponder[IO] :: HNil
+
+  def context(): WorkerContext[IO, Resources, Companions] = {
+    val stage = IO(WorkerStage.FullyAllocated)
+    val stages = fs2.Stream.empty
+    val worker: EitherT[IO, WorkerStage, Worker[IO, Companions]] = EitherT.fromEither[IO](Left(stage.unsafeRunSync()))
+
+    new WorkerContext[IO, Resources, Companions](stage, stages, 10L, HNil, worker) {
+      override def stop()(implicit log: Log[IO]): IO[Unit] = ???
+      override def destroy()(implicit log: Log[IO]): IO[Fiber[IO, Unit]] = ???
+    }
+  }
 
   "" should {
     "a" in {
@@ -59,6 +62,25 @@ class WorkerHttpSpec extends WordSpec with Matchers {
         )
         r <- resp.as[String]
       } yield { resp.status.code shouldBe 404 }).unsafeRunSync()
+    }
+
+    "c" in {
+
+      (for {
+        ref <- Ref.of[IO, Map[Long, WorkerContext[IO, Resources, Companions]]](Map.empty)
+        pool = new WorkersPool[IO, Resources, Companions](ref, (_, _) => IO(context()))
+        _ <- pool.run(EthApp(10, null, null))
+        routes = WorkerHttp.routes[IO, Resources, Companions](pool)
+
+        resp <- routes.orNotFound.run(
+          Request(method = Method.GET, uri = uri"/10/query?path=123")
+        )
+        r <- resp.as[String]
+      } yield {
+        println(resp)
+        println(r)
+        resp.status.code shouldBe 404
+      }).unsafeRunSync()
     }
   }
 }

@@ -56,14 +56,14 @@ object BasicHttp {
       worker.machine
         .query(path)
         .bimap(
-          e => EffectApiError("", e): ApiErrorT,
+          e => EffectApiError(e.getMessage): ApiErrorT,
           r => QueryResponse(new String(r.result))
         )
 
     case TxRequest(tx) ⇒
       worker.producer
         .sendTx(tx)
-        .leftMap(e => EffectApiError("", e): ApiErrorT)
+        .leftMap(e => EffectApiError(e.getMessage): ApiErrorT)
         .map(r => TxResponseNew(r.code, r.info, r.height))
   }
 
