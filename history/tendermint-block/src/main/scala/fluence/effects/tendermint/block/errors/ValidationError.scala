@@ -16,12 +16,23 @@
 
 package fluence.effects.tendermint.block.errors
 
+import com.google.protobuf.ByteString
+import proto3.tendermint.Vote
+import scodec.bits.ByteVector
+
 object ValidationError {
   sealed trait ValidationError extends TendermintBlockError
   case class InvalidDataHash(expected: String, actual: String) extends ValidationError {
-    override def getMessage: String = s"expected: $expected, actual: $actual"
+    override def getMessage: String = s"expected: '$expected', actual: '$actual'"
   }
   case class InvalidCommitHash(expected: String, actual: String) extends ValidationError {
-    override def getMessage: String = s"expected: $expected, actual: $actual"
+    override def getMessage: String = s"expected: '$expected', actual: '$actual'"
+  }
+
+  case class InvalidalidCommitHeight(expected: Long, badCommits: List[Vote]) extends ValidationError {
+    private def hex(bs: ByteString) = ByteVector(bs.asReadOnlyByteBuffer()).toHex
+    private def show(v: Vote) = s"${hex(v.validatorAddress)} ${v.height}}"
+    override def getMessage: String =
+      s"expected: $expected, actual (validator, height): ${badCommits.map(show).mkString(",")}"
   }
 }

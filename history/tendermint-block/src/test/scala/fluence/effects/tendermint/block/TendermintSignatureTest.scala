@@ -54,7 +54,23 @@ class TendermintSignatureTest extends FunSpec with Matchers with OptionValues {
 
       TestData.validators.keySet should contain(vote.validatorIndex)
       val validator = TestData.validators(vote.validatorIndex).toArray
-      TendermintSignature.verifyVote(vote, chainId, validator)
+      TendermintSignature.verifyVote(vote, chainId, validator) shouldBe true
     }
   }
+
+  it("verify commits for blocks") {
+    def hex(bs: ByteString) = ByteVector(bs.asReadOnlyByteBuffer()).toHex
+    val chainId = TestBlocks.blocks.head.header.chain_id
+
+    TestBlocks.blocks.foreach { block =>
+      block.last_commit.precommits.flatten.length shouldBe TestBlocks.validators.size
+
+      block.last_commit.precommits.flatten.foreach { vote =>
+        val validator = TestBlocks.validators(hex(vote.validatorAddress)).toArray
+        TendermintSignature.verifyVote(vote, chainId, validator) shouldBe true
+      }
+    }
+  }
+
+  // TODO: check chain correctness for TestBlock.blocks
 }

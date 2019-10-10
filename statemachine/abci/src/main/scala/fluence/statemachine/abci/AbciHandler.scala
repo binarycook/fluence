@@ -27,6 +27,7 @@ import com.github.jtendermint.jabci.socket.TSocket
 import com.github.jtendermint.jabci.types._
 import com.google.protobuf.ByteString
 import fluence.bp.tx._
+import fluence.effects.tendermint.block.data.Block
 import fluence.effects.tendermint.block.protobuf.ProtobufConverter
 import fluence.log.{Log, LogFactory}
 import fluence.statemachine.abci.block.BlockCollector
@@ -36,6 +37,7 @@ import fluence.statemachine.api.command.TxProcessor
 import fluence.statemachine.api.data.Commit
 import fluence.statemachine.api.query.QueryResponse
 import io.circe.syntax._
+import io.circe.parser._
 import shapeless._
 
 import scala.collection.JavaConverters._
@@ -53,17 +55,31 @@ class AbciHandler[F[_]: Effect: LogFactory] private (
     req: RequestBeginBlock
   ): ResponseBeginBlock = {
     import fluence.effects.tendermint.block.data.SimpleJsonCodecs.Encoders.blockEncoder
+    import fluence.effects.tendermint.block.data.SimpleJsonCodecs.Decoders.blockDecoder
 
     (for {
       log: Log[F] <- LogFactory[F].init("abci", "requestBeginBlock")
-      _ <- blockCollector.addBlockId(Option(req.getHeader.getLastBlockId))
-      _ <- blockCollector.addVotes(req.getLastCommitInfo.getVotesList.asScala.map(_.getFullVote).toList)
       block <- blockCollector.getBlock()
-      _ <- blockCollector.addHeader(req.getHeader)
-      validated = block.flatMap(_.validateHashes())
-      _ = block.map(b => println(b.block.asJson.spaces2))
-      _ <- log.info(s"Block ${req.getHeader.getHeight} validated: ${validated.fold(_.toString, _ => "OK")}")
+      validated = block.flatMap(b => b.validateHashes())
+      _ <- log.info(s"Block ${req.getHeader.getHeight - 1} validated: ${validated.fold(_.toString, _ => "OK")}")
+
       // _ <- send(block)
+      _ <- blockCollector.addLastBlockId(Option(req.getHeader.getLastBlockId))
+      _ <- blockCollector.addLastVotes(req.getLastCommitInfo.getVotesList.asScala.map(_.getFullVote).toList)
+      _ <- blockCollector.addHeader(req.getHeader)
+      _ = block.map(b => println(s"block ${req.getHeader.getHeight - 1} in JSON:\n" + b.block.asJson.spaces2 + "\nEND"))
+      _ = block.map(
+        b =>
+          parse(b.block.asJson.spaces2)
+            .flatMap(_.as[Block])
+            .map(
+              b1 =>
+                if (b1 == b.block) "blocks are the same after serialization"
+                else
+                  s"deserialized block ${req.getHeader.getHeight - 1} in JSON:\n" + b1.asJson.spaces2 + "\nEND"
+            )
+            .fold(e => println(s"JSON error ${req.getHeader.getHeight - 1}: $e"), msg => println(msg))
+      )
     } yield ResponseBeginBlock.newBuilder().build()).toIO.unsafeRunSync()
   }
 
@@ -142,9 +158,11 @@ class AbciHandler[F[_]: Effect: LogFactory] private (
 
     txHandler.commit.value.flatMap {
       case Right(Commit(_, hash, txs)) ⇒
-        blockCollector.addTxs(txs).as(hash.toArray)
+        Log[F].info(s"Adding $txs to blockCollector") >>
+          blockCollector.addTxs(txs).as(hash.toArray)
       case Left(err) ⇒
-        Sync[F].raiseError[Array[Byte]](err)
+        Log[F].error(s"Error on commit: $err", err) >>
+          Sync[F].raiseError[Array[Byte]](err)
     }.map(ByteString.copyFrom)
       .map(
         ResponseCommit

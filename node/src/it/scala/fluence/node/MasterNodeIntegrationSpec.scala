@@ -26,8 +26,9 @@ import com.softwaremill.sttp.{SttpBackend, _}
 import fluence.effects.ethclient.EthClient
 import fluence.node.eth.{FluenceContract, NodeEthState}
 import fluence.node.status.MasterStatus
-import org.scalatest.{Timer ⇒ _, _}
+import org.scalatest.{Timer => _, _}
 import eth.FluenceContractTestOps._
+import fluence.bp.tx.Tx
 import fluence.log.{Log, LogFactory}
 import fluence.node.config.FluenceContractConfig
 import fluence.effects.testkit.Timed
@@ -153,7 +154,7 @@ class MasterNodeIntegrationSpec
       master2Port: Short,
       master1ContainerId: String,
       master2ContainerId: String
-    )(implicit ethClient: EthClient, sttp: Sttp): IO[Unit] = {
+    )(implicit ethClient: EthClient, sttpBackend: Sttp): IO[Unit] = {
 
       for {
         contract ← FluenceContract[IO](ethClient, contractConfig)
@@ -184,6 +185,25 @@ class MasterNodeIntegrationSpec
           period = 5.seconds
         )
 
+        resp <- sttp
+          .post(uri"http://127.0.0.1:$master1Port/apps/1/tx")
+          .response(asString)
+          .body(Tx(Tx.Head("session", 0), Tx.Data(Array.fill(10)(0))).generateTx())
+          .send()
+        _ <- Timer[IO].sleep(1.seconds)
+        resp <- sttp
+          .post(uri"http://127.0.0.1:$master1Port/apps/1/tx")
+          .response(asString)
+          .body(Tx(Tx.Head("session", 1), Tx.Data(Array.fill(10)(0))).generateTx())
+          .send()
+        resp <- sttp
+          .post(uri"http://127.0.0.1:$master1Port/apps/1/tx")
+          .response(asString)
+          .body(Tx(Tx.Head("session", 2), Tx.Data(Array.fill(10)(0))).generateTx())
+          .send()
+        _ = println(s"Sent tx, response: $resp ${resp.body}")
+        _ <- Timer[IO].sleep(90.minutes)
+
         _ = lastAppId += 1
 
         _ ← log.info("Both workers are operating, going to get WorkerRunning from Master status")
@@ -198,6 +218,7 @@ class MasterNodeIntegrationSpec
           },
           maxWait = 90.seconds
         )
+
       } yield ()
     }
 

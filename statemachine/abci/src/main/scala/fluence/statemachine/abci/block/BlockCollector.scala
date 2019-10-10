@@ -46,10 +46,10 @@ case class PartialBlock(
   header: Option[Header] = None,
   // from Commit at N
   txs: List[Tx] = Nil,
-  // from BeginBlock at N+1
-  votes: Option[List[Vote]] = None,
-  // from BeginBlock at N+1
-  blockId: Option[Option[BlockID]] = None
+  // from BeginBlock at N
+  lastVotes: Option[List[Vote]] = None,
+  // from BeginBlock at N
+  lastBlockId: Option[Option[BlockID]] = None
 )
 
 case class BlockNotReadyError(field: String) extends EffectError {
@@ -100,17 +100,17 @@ object ABCIConverter {
 
 class BlockCollector[F[_]: Monad](ref: Ref[F, PartialBlock]) {
 
-  def addHeader(header: ABCIHeader) =
+  def addHeader(header: ABCIHeader): F[Unit] =
     ref.update(_.copy(header = Some(ABCIConverter.header(header))))
 
-  def addTxs(txs: List[Tx]) =
+  def addTxs(txs: List[Tx]): F[Unit] =
     ref.update(_.copy(txs = txs))
 
-  def addVotes(votes: List[ABCIVote]) =
-    ref.update(_.copy(votes = Some(votes.map(ABCIConverter.vote))))
+  def addLastVotes(votes: List[ABCIVote]): F[Unit] =
+    ref.update(_.copy(lastVotes = Some(votes.map(ABCIConverter.vote))))
 
-  def addBlockId(blockId: Option[ABCIBlockID]) =
-    ref.update(_.copy(blockId = Some(blockId.map(ABCIConverter.blockId))))
+  def addLastBlockId(blockId: Option[ABCIBlockID]): F[Unit] =
+    ref.update(_.copy(lastBlockId = Some(blockId.map(ABCIConverter.blockId))))
 
   def getBlock(): F[Either[BlockNotReadyError, TendermintBlock]] =
     ref
@@ -119,8 +119,9 @@ class BlockCollector[F[_]: Monad](ref: Ref[F, PartialBlock]) {
         block =>
           for {
             header <- get(block.header, "header")
-            votes <- get(block.votes, "votes")
-            blockId <- get(block.blockId, "blockId")
+            votes <- get(block.lastVotes, "lastVotes")
+            blockId <- get(block.lastBlockId, "lastBlockId")
+
             data = Data(block.txs.map(tx => Base64ByteVector(ByteVector(tx.generateTx()))).some)
             lastCommit = LastCommit(blockId, votes.map(Some(_)))
           } yield TendermintBlock(Block(header, data, lastCommit))

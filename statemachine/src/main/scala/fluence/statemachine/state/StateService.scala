@@ -105,6 +105,7 @@ class StateServiceImpl[F[_]: Monad](
       currentState <- state.get
       // Form a block: take ordered txs from AbciState
       sTxs @ (_, transactions) ← MachineState.formBlock[F].run(currentState)
+      _ <- log.info(s"transaction on block ${currentState.height + 1}: ${transactions.length} ${transactions}")
 
       // Process txs one by one
       st ← Monad[F].tailRecM[(MachineState, List[Tx]), MachineState](sTxs) {

@@ -121,7 +121,7 @@ case class Block(header: Header, data: Data, last_commit: LastCommit) {
    *
    * @return Copy of the Block with filled hashes
    */
-  private def fillHeader(): Block = {
+  def fillHeader(): Block = {
     val lastCommitHash = ByteVector(commitHash(last_commit.precommits))
     val dataHash = ByteVector(this.dataHash())
     val evHash = ByteVector(evidenceHash(Nil))

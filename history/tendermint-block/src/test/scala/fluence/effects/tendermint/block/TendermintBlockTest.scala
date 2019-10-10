@@ -40,4 +40,10 @@ class TendermintBlockTest extends FunSpec with Matchers with OptionValues with E
 
     block.isRight shouldBe true
   }
+
+  it("verify commit hash in blocks") {
+    TestBlocks.blocks.foreach(block => TendermintBlock(block).validateHashes().isRight shouldBe true)
+  }
+
+  // TODO: verify chain correctness for TestBlocks.blocks
 }

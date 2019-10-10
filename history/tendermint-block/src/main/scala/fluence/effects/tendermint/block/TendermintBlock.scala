@@ -50,8 +50,19 @@ case class TendermintBlock(block: Block) {
       Either.cond(expected == actual, (), err(expected, actual))
 
     for {
+      _ <- checkLastCommit()
       _ <- validateOr(ByteVector(block.dataHash()).toHex, block.header.data_hash.toHex, InvalidDataHash)
       _ <- validateOr(ByteVector(block.lastCommitHash()).toHex, block.header.last_commit_hash.toHex, InvalidCommitHash)
     } yield ()
+  }
+
+  /**
+   * Checks that all votes (aka commits) are meant for the previous block
+   */
+  private def checkLastCommit(): Either[ValidationError, Unit] = {
+    val previousHeight = block.header.height - 1
+    val badCommits = block.last_commit.precommits.flatten.filter(_.height != previousHeight)
+
+    Either.cond(badCommits.isEmpty, (), InvalidalidCommitHeight(expected = previousHeight, badCommits))
   }
 }
