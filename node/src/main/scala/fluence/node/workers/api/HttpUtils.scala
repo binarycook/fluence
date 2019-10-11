@@ -54,6 +54,8 @@ object HttpUtils {
       case ApiError(message) =>
         log.warn(s"RPC request failed: $message") *>
           InternalServerError(message)
+      case WorkerNotResponding(appId, stage) =>
+        HttpUtils.stageToResponse(appId, stage)
       /*case RpcRequestFailed(err) ⇒
         log.warn(s"RPC request failed", err) *>
           InternalServerError(err.getMessage)

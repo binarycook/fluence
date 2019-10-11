@@ -1,16 +1,11 @@
 package fluence.node.workers.api
 
 import cats.data.EitherT
-import cats.effect.concurrent.Ref
-import cats.effect.{ContextShift, Fiber, IO, Timer}
+import cats.effect.{ContextShift, IO, Timer}
 import fluence.log.{Log, LogFactory}
-import fluence.worker.eth.EthApp
-import fluence.worker.responder.WorkerResponder
-import fluence.worker.{Worker, WorkerContext, WorkerStage, WorkersPool}
-import org.scalatest.{Matchers, WordSpec}
-import shapeless.{::, HNil}
 import org.http4s._
 import org.http4s.implicits._
+import org.scalatest.{Matchers, WordSpec}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -23,55 +18,54 @@ class WorkerHttpSpec extends WordSpec with Matchers {
 
   implicit val http4sDsl = org.http4s.dsl.io
 
-  type Resources = HNil
-  type Companions = WorkerResponder[IO] :: HNil
-
-  def context(): WorkerContext[IO, Resources, Companions] = {
-    val stage = IO(WorkerStage.FullyAllocated)
-    val stages = fs2.Stream.empty
-    val worker: EitherT[IO, WorkerStage, Worker[IO, Companions]] = EitherT.fromEither[IO](Left(stage.unsafeRunSync()))
-
-    new WorkerContext[IO, Resources, Companions](stage, stages, 10L, HNil, worker) {
-      override def stop()(implicit log: Log[IO]): IO[Unit] = ???
-      override def destroy()(implicit log: Log[IO]): IO[Fiber[IO, Unit]] = ???
-    }
-  }
-
-  "" should {
-    "a" in {
-
+  "WorkerHttp" should {
+    "return an error, if request is incorrect" in {
+      val handler = new Handler[IO] {
+        override def handle(appId: Long, apiRequest: ApiRequest)(
+          implicit log: Log[IO]
+        ): EitherT[IO, ApiErrorT, ApiResponse] = throw new NotImplementedError("def handle")
+      }
+      val routes = WorkerHttp.routes[IO](handler)
       (for {
-        ref <- Ref.of[IO, Map[Long, WorkerContext[IO, Resources, Companions]]](Map.empty)
-        pool = new WorkersPool[IO, Resources, Companions](ref, (_, _) => IO.never)
-        routes = WorkerHttp.routes[IO, Resources, Companions](pool)
+
         resp <- routes.orNotFound.run(
           Request(method = Method.GET, uri = uri"/1/some")
         )
         r <- resp.as[String]
-      } yield { resp.status.code shouldBe 400 }).unsafeRunSync()
+      } yield {
+        println(r)
+        resp.status.code shouldBe 400
+      }).unsafeRunSync()
     }
 
-    "b" in {
-
+    "return an error, if handler returns an error" in {
+      val handler = new Handler[IO] {
+        override def handle(appId: Long, apiRequest: ApiRequest)(
+          implicit log: Log[IO]
+        ): EitherT[IO, ApiErrorT, ApiResponse] =
+          EitherT.fromEither(Left(UnexpectedApiError("unexpected"): ApiErrorT))
+      }
+      val routes = WorkerHttp.routes[IO](handler)
       (for {
-        ref <- Ref.of[IO, Map[Long, WorkerContext[IO, Resources, Companions]]](Map.empty)
-        pool = new WorkersPool[IO, Resources, Companions](ref, (_, _) => IO.never)
-        routes = WorkerHttp.routes[IO, Resources, Companions](pool)
         resp <- routes.orNotFound.run(
-          Request(method = Method.GET, uri = uri"/1/query?path=123")
+          Request(method = Method.GET, uri = uri"/10/query?path=123")
         )
         r <- resp.as[String]
-      } yield { resp.status.code shouldBe 404 }).unsafeRunSync()
+      } yield {
+        println(r)
+        resp.status.code shouldBe 500
+      }).unsafeRunSync()
     }
 
-    "c" in {
-
+    "return a response, if worker is responding ok" in {
+      val handler = new Handler[IO] {
+        override def handle(appId: Long, apiRequest: ApiRequest)(
+          implicit log: Log[IO]
+        ): EitherT[IO, ApiErrorT, ApiResponse] =
+          EitherT.fromEither(Right(QueryResponse("result")))
+      }
+      val routes = WorkerHttp.routes[IO](handler)
       (for {
-        ref <- Ref.of[IO, Map[Long, WorkerContext[IO, Resources, Companions]]](Map.empty)
-        pool = new WorkersPool[IO, Resources, Companions](ref, (_, _) => IO(context()))
-        _ <- pool.run(EthApp(10, null, null))
-        routes = WorkerHttp.routes[IO, Resources, Companions](pool)
-
         resp <- routes.orNotFound.run(
           Request(method = Method.GET, uri = uri"/10/query?path=123")
         )
@@ -79,8 +73,9 @@ class WorkerHttpSpec extends WordSpec with Matchers {
       } yield {
         println(resp)
         println(r)
-        resp.status.code shouldBe 404
+        resp.status.code shouldBe 200
       }).unsafeRunSync()
     }
+
   }
 }

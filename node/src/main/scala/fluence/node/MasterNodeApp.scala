@@ -45,6 +45,7 @@ import fluence.log.{Log, LogFactory}
 import fluence.node.config.{Configuration, MasterConfig}
 import fluence.node.eth.NodeEth
 import fluence.node.status.StatusAggregator
+import fluence.node.workers.api.MainHandler
 import org.http4s.server.Server
 
 import scala.language.higherKinds
@@ -155,11 +156,13 @@ object MasterNodeApp extends IOApp {
     for {
       statusAggregator <- StatusAggregator.make(masterConf, pool, nodeEth)
       _ <- Log.resource[IO].info("Going to make MasterHttp")
+      handler = new MainHandler(pool)
       masterHttp <- MasterHttp.make(
         "0.0.0.0",
         masterConf.httpApi.port.toShort,
         statusAggregator,
         pool,
+        handler,
         kademliaHttp,
         receiptDhtHttp :: Nil
       )
